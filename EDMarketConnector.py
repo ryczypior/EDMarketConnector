@@ -87,6 +87,9 @@ class AppWindow:
         self.w.rowconfigure(0, weight=1)
         self.w.columnconfigure(0, weight=1)
 
+        self.authdialog = None
+        self.prefsdialog = None
+
         plug.load_plugins(master)
 
         if platform != 'darwin':
@@ -320,6 +323,7 @@ class AppWindow:
 
     # callback after the Preferences dialog is applied
     def postprefs(self, dologin=True):
+        self.prefsdialog = None
         self.set_labels()	# in case language has changed
 
         # (Re-)install hotkey monitoring
@@ -378,7 +382,8 @@ class AppWindow:
             self.session.login(username, config.get_password(username), monitor.is_beta)
             self.status['text'] = ''
         except companion.VerificationRequired:
-            return prefs.AuthenticationDialog(self.w, partial(self.verify, self.login))
+            if not self.authdialog:
+                self.authdialog = prefs.AuthenticationDialog(self.w, partial(self.verify, self.login))
         except companion.ServerError as e:
             self.status['text'] = unicode(e)
         except Exception as e:
@@ -388,6 +393,7 @@ class AppWindow:
 
     # callback after verification code
     def verify(self, callback, code):
+        self.authdialog = None
         try:
             self.session.verify(code)
             config.save()	# Save settings now for use by command-line app
@@ -516,7 +522,8 @@ class AppWindow:
                                 self.status['text'] = ''
 
         except companion.VerificationRequired:
-            return prefs.AuthenticationDialog(self.w, partial(self.verify, self.getandsend))
+            if not self.authdialog:
+                self.authdialog = prefs.AuthenticationDialog(self.w, partial(self.verify, self.getandsend))
 
         # Companion API problem
         except (companion.ServerError, companion.ServerLagging) as e:
@@ -617,8 +624,8 @@ class AppWindow:
                     cmdrs = config.get('cmdrs')
                     cmdrs[0] = monitor.cmdr	# New Cmdr uses same credentials as old
                     config.set('cmdrs', cmdrs)
-                else:
-                    prefs.PreferencesDialog(self.w, self.postprefs)	# First run or failed migration
+                elif not self.prefsdialog:
+                    self.prefsdialog = prefs.PreferencesDialog(self.w, self.postprefs)	# First run or failed migration
 
             if not entry['event'] or not monitor.mode:
                 return	# Startup or in CQC
@@ -661,9 +668,6 @@ class AppWindow:
                     # strip out properties disallowed by the schema
                     for thing in ['CockpitBreach', 'BoostUsed', 'FuelLevel', 'FuelUsed', 'JumpDist', 'Latitude', 'Longitude', 'Wanted']:
                         entry.pop(thing, None)
-                    for thing in entry.keys():
-                        if thing.endswith('_Localised'):
-                            entry.pop(thing, None)
 
                     # add planet to Docked event for planetary stations if known
                     if entry['event'] == 'Docked' and monitor.planet:
@@ -678,7 +682,7 @@ class AppWindow:
                     if 'SystemAddress' not in entry and monitor.systemaddress:
                         entry['SystemAddress'] = monitor.systemaddress
 
-                    self.eddn.export_journal_entry(monitor.cmdr, monitor.is_beta, entry)
+                    self.eddn.export_journal_entry(monitor.cmdr, monitor.is_beta, self.filter_localised(entry))
 
             except requests.exceptions.RequestException as e:
                 if __debug__: print_exc()
@@ -729,7 +733,8 @@ class AppWindow:
         try:
             data = self.session.profile()
         except companion.VerificationRequired:
-            return prefs.AuthenticationDialog(self.w, partial(self.verify, self.shipyard_url))
+            if not self.authdialog:
+                self.authdialog = prefs.AuthenticationDialog(self.w, partial(self.verify, self.shipyard_url))
         except companion.ServerError as e:
             self.status['text'] = str(e)
             return
@@ -750,6 +755,18 @@ class AppWindow:
         else:
             self.status['text'] = ''
             return coriolis.url(data, monitor.is_beta)
+
+    # Recursively filter '*_Localised' keys from dict
+    def filter_localised(self, d):
+        filtered = OrderedDict()
+        for k, v in d.iteritems():
+            if k.endswith('_Localised'):
+                pass
+            elif hasattr(v, 'iteritems'):
+                filtered[k] = self.filter_localised(v)
+            else:
+                filtered[k] = v
+        return filtered
 
     def cooldown(self):
         if time() < self.holdofftime:
@@ -794,7 +811,8 @@ class AppWindow:
                 with open(f, 'wt') as h:
                     h.write(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True, separators=(',', ': ')).encode('utf-8'))
         except companion.VerificationRequired:
-            prefs.AuthenticationDialog(self.w, partial(self.verify, self.save_raw))
+            if not self.authdialog:
+                self.authdialog = prefs.AuthenticationDialog(self.w, partial(self.verify, self.save_raw))
         except companion.ServerError as e:
             self.status['text'] = str(e)
         except Exception as e:
@@ -864,7 +882,7 @@ if __name__ == "__main__":
         GetWindowTextLength    = ctypes.windll.user32.GetWindowTextLengthW
         GetProcessHandleFromHwnd = ctypes.windll.oleacc.GetProcessHandleFromHwnd
         SetForegroundWindow    = ctypes.windll.user32.SetForegroundWindow
-        ShowWindow             = ctypes.windll.user32.ShowWindow
+        ShowWindowAsync        = ctypes.windll.user32.ShowWindowAsync
 
         def WindowTitle(h):
             if h:
@@ -879,7 +897,7 @@ if __name__ == "__main__":
             cls = ctypes.create_unicode_buffer(257)
             if GetClassName(hWnd, cls, 257) and cls.value == 'TkTopLevel' and WindowTitle(hWnd) == applongname and GetProcessHandleFromHwnd(hWnd):
                 # If GetProcessHandleFromHwnd succeeds then the app is already running as this user
-                ShowWindow(hWnd, 9)	# SW_RESTORE
+                ShowWindowAsync(hWnd, 9)	# SW_RESTORE
                 SetForegroundWindow(hWnd)
                 sys.exit(0)
             return True
