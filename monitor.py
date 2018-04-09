@@ -13,7 +13,7 @@ if __debug__:
     from traceback import print_exc
 
 from config import config
-from companion import ship_map
+from companion import ship_file_name
 
 
 if platform=='darwin':
@@ -451,8 +451,6 @@ class EDLogs(FileSystemEventHandler):
                 self.stationservices = entry.get('StationServices')	# None under E:D < 2.4
             elif entry['event'] == 'ApproachBody':
                 self.planet = entry['Body']
-            elif entry['event'] == 'SupercruiseExit':
-                self.planet = entry.get('Body') if entry.get('BodyType') == 'Planet' else None
             elif entry['event'] in ['LeaveBody', 'SupercruiseEntry']:
                 self.planet = None
 
@@ -467,7 +465,7 @@ class EDLogs(FileSystemEventHandler):
                     if k in self.state['Rank']:
                         self.state['Rank'][k] = (self.state['Rank'][k][0], min(v, 100))	# perhaps not taken promotion mission yet
             elif entry['event'] in ['Reputation', 'Statistics']:
-                payload = dict(entry)
+                payload = OrderedDict(entry)
                 payload.pop('event')
                 payload.pop('timestamp')
                 self.state[entry['event']] = payload
@@ -735,7 +733,7 @@ class EDLogs(FileSystemEventHandler):
                 h.write(string)
             return
 
-        ship = self.state['ShipName'] or ship_map.get(self.state['ShipType'], self.state['ShipType'])
+        ship = ship_file_name(self.state['ShipName'], self.state['ShipType'])
         regexp = re.compile(re.escape(ship) + '\.\d\d\d\d\-\d\d\-\d\dT\d\d\.\d\d\.\d\d\.txt')
         oldfiles = sorted([x for x in listdir(config.get('outdir')) if regexp.match(x)])
         if oldfiles:

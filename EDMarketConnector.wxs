@@ -229,10 +229,16 @@
 					</Directory>
 					<Directory Id="plugins" Name="plugins">
 						<Component Guid="*">
+							<File KeyPath="yes" Source="SourceDir\plugins\coriolis.py" />
+						</Component>
+						<Component Guid="*">
 							<File KeyPath="yes" Source="SourceDir\plugins\eddb.py" />
 						</Component>
 						<Component Guid="*">
 							<File KeyPath="yes" Source="SourceDir\plugins\edsm.py" />
+						</Component>
+						<Component Guid="*">
+							<File KeyPath="yes" Source="SourceDir\plugins\edsy.py" />
 						</Component>
 						<Component Guid="*">
 							<File KeyPath="yes" Source="SourceDir\plugins\inara.py" />
@@ -464,6 +470,7 @@
 			<ComponentRef Id="_tkinter.pyd" />
 			<ComponentRef Id="bz2.pyd" />
 			<ComponentRef Id="cacert.pem" />
+			<ComponentRef Id="coriolis.py" />
 			<ComponentRef Id="commodity.csv" />
 			<ComponentRef Id="cs.strings" />
 			<ComponentRef Id="de.strings" />
@@ -472,6 +479,7 @@
 			<ComponentRef Id="EDMC.exe" />
 			<ComponentRef Id="eddb.py" />
 			<ComponentRef Id="edsm.py" />
+			<ComponentRef Id="edsy.py" />
 			<ComponentRef Id="es.strings" />
 			<ComponentRef Id="fi.strings" />
 			<ComponentRef Id="fr.strings" />

@@ -46,9 +46,18 @@ this.loadout = None
 this.fleet = None
 this.shipswap = False	# just swapped ship
 
-# URLs
+
+# Main window clicks
+this.system_link = None
 this.system = None
+this.station_link = None
 this.station = None
+
+def system_url(system_name):
+    return this.system
+
+def station_url(system_name, station_name):
+    return this.station or this.system
 
 
 def plugin_start():
@@ -56,6 +65,10 @@ def plugin_start():
     this.thread.daemon = True
     this.thread.start()
     return 'Inara'
+
+def plugin_app(parent):
+    this.system_link  = parent.children['system']	# system label in main window
+    this.station_link = parent.children['station']	# station label in main window
 
 def plugin_stop():
     # Send any unsent events
@@ -109,6 +122,12 @@ def prefs_changed(cmdr, is_beta):
     changed = config.getint('inara_out') != this.log.get()
     config.set('inara_out', this.log.get())
 
+    # Override standard URL functions
+    if config.get('system_provider') == 'Inara':
+        this.system_link['url'] = this.system
+    if config.get('station_provider') == 'Inara':
+        this.station_link['url'] = this.station or this.system
+
     if cmdr and not is_beta:
         this.cmdr = cmdr
         cmdrs = config.get('inara_cmdrs') or []
@@ -161,6 +180,8 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
         this.loadout = None
         this.fleet = None
         this.shipswap = False
+        this.system = None
+        this.station = None
     elif entry['event'] in ['Resurrect', 'ShipyardBuy', 'ShipyardSell', 'SellShipOnRebuy']:
         # Events that mean a significant change in credits so we should send credits after next "Update"
         this.lastcredits = 0
@@ -265,6 +286,8 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
             # Update location
             if (entry['event'] in ['StartUp', 'Cargo'] or this.newuser) and system:
                 this.undocked = False
+                this.system = None
+                this.station = None
                 add_event('setCommanderTravelLocation', entry['timestamp'],
                           OrderedDict([
                               ('starsystemName', system),
@@ -289,6 +312,7 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
 
             elif entry['event'] == 'Undocked':
                 this.undocked = True
+                this.station = None
 
             elif entry['event'] == 'SupercruiseEntry':
                 if this.undocked:
@@ -303,6 +327,7 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
 
             elif entry['event'] == 'FSDJump':
                 this.undocked = False
+                this.system = None
                 add_event('addCommanderTravelFSDJump', entry['timestamp'],
                           OrderedDict([
                               ('starsystemName', entry['StarSystem']),
@@ -312,8 +337,15 @@ def journal_entry(cmdr, is_beta, system, station, entry, state):
                           ]))
 
 
+            # Override standard URL functions
+            if config.get('system_provider') == 'Inara':
+                this.system_link['url'] = this.system
+            if config.get('station_provider') == 'Inara':
+                this.station_link['url'] = this.station or this.system
+
+
+            # Send event(s) to Inara
             if entry['event'] == 'ShutDown' or len(this.events) > old_events:
-                # We have new event(s) so send to Inara
 
                 # Send cargo and materials if changed
                 cargo = [ OrderedDict([('itemName', k), ('itemCount', state['Cargo'][k])]) for k in sorted(state['Cargo']) ]
@@ -603,6 +635,12 @@ def cmdr_data(data, is_beta):
 
     this.cmdr = data['commander']['name']
 
+    # Override standard URL functions
+    if config.get('system_provider') == 'Inara':
+        this.system_link['url'] = this.system
+    if config.get('station_provider') == 'Inara':
+        this.station_link['url'] = this.station or this.system
+
     if config.getint('inara_out') and not is_beta and not this.multicrew and credentials(this.cmdr):
         if not (CREDIT_RATIO > this.lastcredits / data['commander']['credits'] > 1/CREDIT_RATIO):
             this.events = [x for x in this.events if x['eventName'] != 'setCommanderCredits']	# Remove any unsent
@@ -715,10 +753,14 @@ def worker():
                             print 'Inara\t%s %s\t%s' % (reply_event['eventStatus'], reply_event.get('eventStatusText', ''), json.dumps(data_event))
                             if reply_event['eventStatus'] // 100 != 2:
                                 plug.show_error(_('Error: Inara {MSG}').format(MSG = '%s, %s' % (data_event['eventName'], reply_event.get('eventStatusText', reply_event['eventStatus']))))
-                            if data_event['eventName'] in ['addCommanderTravelDock', 'addCommanderTravelFSDJump', 'setCommanderTravelLocation']:
-                                eventData = reply_event.get('eventData', {})
-                                this.system  = eventData.get('starsystemInaraURL')
-                                this.station = eventData.get('stationInaraURL')
+                        if data_event['eventName'] in ['addCommanderTravelDock', 'addCommanderTravelFSDJump', 'setCommanderTravelLocation']:
+                            eventData = reply_event.get('eventData', {})
+                            this.system  = eventData.get('starsystemInaraURL')
+                            if config.get('system_provider') == 'Inara':
+                                this.system_link['url'] = this.system	# Override standard URL function
+                            this.station = eventData.get('stationInaraURL')
+                            if config.get('station_provider') == 'Inara':
+                                this.station_link['url'] = this.station or this.system	# Override standard URL function
                 break
             except:
                 if __debug__: print_exc()
